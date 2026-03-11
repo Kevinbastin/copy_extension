@@ -93,3 +93,48 @@ chrome.storage.onChanged.addListener((changes) => {
 
 // Log when service worker starts
 console.log('[Smart Copy History] Background service worker started');
+
+// Context Menus
+chrome.runtime.onInstalled.addListener(() => {
+    chrome.contextMenus.create({
+        id: "sch-copy-selection",
+        title: "Save '%s' to Notebook",
+        contexts: ["selection"]
+    });
+    chrome.contextMenus.create({
+        id: "sch-copy-link",
+        title: "Save Link to Notebook",
+        contexts: ["link"]
+    });
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+    let textToSave = info.selectionText || info.linkUrl;
+
+    if (textToSave) {
+        // Send it to the same flow
+        chrome.storage.local.get({ copyHistory: [] }, (result) => {
+            let history = result.copyHistory || [];
+            if (history.length > 0 && history[0].text === textToSave) return;
+
+            const entry = {
+                id: generateId(),
+                text: textToSave,
+                category: categorize(textToSave),
+                url: tab.url || '',
+                timestamp: Date.now(),
+                pinned: false
+            };
+
+            history.unshift(entry);
+            const pinned = history.filter((item) => item.pinned);
+            const unpinned = history.filter((item) => !item.pinned);
+            if (unpinned.length > MAX_HISTORY) {
+                history = [...pinned, ...unpinned.slice(0, MAX_HISTORY)].sort((a, b) => b.timestamp - a.timestamp);
+            }
+            chrome.storage.local.set({ copyHistory: history }, () => {
+                console.log('[Smart Copy History] Saved from context menu');
+            });
+        });
+    }
+});

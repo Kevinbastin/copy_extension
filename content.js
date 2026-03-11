@@ -217,32 +217,44 @@
     if (isPasswordField(document.activeElement)) return;
 
     let copiedText = '';
+    const activeEl = document.activeElement;
 
-    // If there's an active selection, try to see if it's a single link
-    try {
-      const selection = window.getSelection();
-      if (selection && selection.rangeCount > 0) {
-        const container = selection.getRangeAt(0).commonAncestorContainer;
-        const element = container.nodeType === 3 ? container.parentNode : container;
-
-        // If the user selected exactly a link, we might want its URL if text is empty
-        if (element && element.tagName === 'A' && element.href) {
-          copiedText = selection.toString() || element.href;
-        } else {
-          copiedText = selection.toString();
+    // Check if user is copying from an input or textarea
+    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+      try {
+        if (typeof activeEl.selectionStart === 'number' && typeof activeEl.selectionEnd === 'number') {
+          copiedText = activeEl.value.substring(activeEl.selectionStart, activeEl.selectionEnd);
         }
+      } catch (e) { /* Ignore unsupported input types */ }
+    }
+
+    // Otherwise, check standard DOM selection
+    if (!copiedText) {
+      try {
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+          const container = selection.getRangeAt(0).commonAncestorContainer;
+          const element = container.nodeType === 3 ? container.parentNode : container;
+
+          // If the user selected exactly a link, we might want its URL if text is empty
+          if (element && element.tagName === 'A' && element.href) {
+            copiedText = selection.toString() || element.href;
+          } else {
+            copiedText = selection.toString();
+          }
+        }
+      } catch (e) {
+        console.warn('[Smart Copy] error picking selection', e);
       }
-    } catch (e) {
-      console.warn('[Smart Copy] error picking selection', e);
     }
 
     if (copiedText) handleCopiedText(copiedText);
   }
 
-  document.addEventListener('copy', handleSystemCopy);
-  document.addEventListener('cut', handleSystemCopy);
+  document.addEventListener('copy', handleSystemCopy, true);
+  document.addEventListener('cut', handleSystemCopy, true);
 
-  // Event 2: Keyboard fallback (Ctrl+C / Cmd+C)
+  // Event 2: Keyboard fallback (Ctrl+C / Cmd+C / Ctrl+X)
   document.addEventListener('keydown', (event) => {
     // If pressing ESC and sidebar is open, close it
     if (event.key === 'Escape' && isSidebarOpen) {
@@ -257,19 +269,38 @@
       return;
     }
 
-    // Ctrl+C fallback
-    const isCopy = (event.ctrlKey || event.metaKey) && event.key === 'c';
-    if (!isCopy) return;
+    // Ctrl+C / Ctrl+X fallback
+    const isCopyOrCut = (event.ctrlKey || event.metaKey) &&
+      (event.key.toLowerCase() === 'c' || event.key.toLowerCase() === 'x' || event.key === 'Insert');
+
+    if (!isCopyOrCut) return;
 
     if (isPasswordField(document.activeElement)) return;
 
     setTimeout(() => {
-      const selection = window.getSelection();
-      if (selection && selection.toString().trim()) {
-        handleCopiedText(selection.toString());
+      let copiedText = '';
+      const activeEl = document.activeElement;
+
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+        try {
+          if (typeof activeEl.selectionStart === 'number' && typeof activeEl.selectionEnd === 'number') {
+            copiedText = activeEl.value.substring(activeEl.selectionStart, activeEl.selectionEnd);
+          }
+        } catch (e) { }
+      }
+
+      if (!copiedText) {
+        const selection = window.getSelection();
+        if (selection && selection.toString().trim()) {
+          copiedText = selection.toString();
+        }
+      }
+
+      if (copiedText && copiedText.trim()) {
+        handleCopiedText(copiedText);
       }
     }, 50);
-  });
+  }, true);
 
   // Listen for storage changes to auto-update the sidebar if it's open
   chrome.storage.onChanged.addListener((changes) => {

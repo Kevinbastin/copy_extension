@@ -7,7 +7,7 @@
     "activeTab",
     "storage",
     "clipboardWrite",
-    "unlimitedStorage"
+    "contextMenus"
   ],
   "action": {
     "default_popup": "popup.html",
